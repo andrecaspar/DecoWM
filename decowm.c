@@ -156,17 +156,17 @@ void HandleMapRequest(XEvent *event)
     XSelectInput(display, mapWindow, ExposureMask|StructureNotifyMask|EnterWindowMask|LeaveWindowMask);
     XGrabButton(display, AnyButton, Mod1Mask, mapWindow, True, PointerMotionMask, GrabModeAsync, GrabModeAsync, 0, 0);
 
-    Window parentDec = XCreateSimpleWindow(display, root, 0, 0, 1, 1, 0, BlackPixel(display, screen), 0x86d6b2);
+    Window parentDec = XCreateSimpleWindow(display, root, 0, 0, 1, 1, 0, 0x000000, 0x86d6b2);
     XMapWindow(display, parentDec);
+    //XSelectInput(display, parentDec, ExposureMask); // crash
     XGrabButton(display, AnyButton, AnyModifier, parentDec, True, PointerMotionMask|ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
 
     int id = NextID();
     SetID(mapWindow, id);
     SetID(parentDec, id);
+
     CreateWindow(mapWindow, parentDec); // TODO pointers // TODO change name
-
     Decorate(id);
-
     CenterWindow(id);
 }
 
@@ -220,32 +220,54 @@ void HandleMotionNotify(XEvent *event)
     XWindowAttributes windowAttrib;
     XGetWindowAttributes(display, workspaces[currentWorkspace][id]->window, &windowAttrib);
 
+    //FILE *log = fopen("/tmp/DecoWMLog", "a");
+    //fprintf(log, "a: %i\n", (screenHeight - bottomMargin - 10));
+    //fclose(log);
     if (windowAttrib.x + windowAttrib.width + xd + (int)xpmAttribs[right_inactive].width > screenWidth - 15 &&
-        windowAttrib.x + windowAttrib.width + xd + (int)xpmAttribs[right_inactive].width <= screenWidth) {
+        windowAttrib.x + windowAttrib.width + xd + (int)xpmAttribs[right_inactive].width <= screenWidth &&
+        buttonClick.button == 1) {
         XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, screenWidth - windowAttrib.width - (int)xpmAttribs[right_inactive].width,
                                    windowAttrib.y,
                                    windowAttrib.width,
                                    windowAttrib.height);
     }
     else if (windowAttrib.x + xd + (int)xpmAttribs[left_inactive].width < 15 &&
-             windowAttrib.x + xd + (int)xpmAttribs[left_inactive].width >= 0) {
+             windowAttrib.x + xd + (int)xpmAttribs[left_inactive].width >= 0 &&
+             buttonClick.button == 1) {
         XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, (int)xpmAttribs[right_inactive].width,
                                    windowAttrib.y,
                                    windowAttrib.width,
                                    windowAttrib.height);
+    }
+    else if (event->xbutton.x_root == screenWidth - 1 && buttonClick.button == 1) {
+        XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, screenWidth / 2,
+                                   xpmAttribs[title_1_inactive].height + topMargin,
+                                   screenWidth / 2 - (xpmAttribs[right_inactive].width * 2),
+                                   screenHeight - xpmAttribs[title_1_inactive].height - xpmAttribs[bottom_inactive].height - topMargin - bottomMargin);
+    }
+    else if (event->xbutton.x_root == 0 && buttonClick.button == 1) {
+        XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, xpmAttribs[right_inactive].width,
+                                   xpmAttribs[title_1_inactive].height + topMargin,
+                                   screenWidth / 2 - (xpmAttribs[right_inactive].width * 2),
+                                   screenHeight - xpmAttribs[title_1_inactive].height - xpmAttribs[bottom_inactive].height - topMargin - bottomMargin);
+    }
+    else if (event->xbutton.y_root == 0 && buttonClick.button == 1) {
+        XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, xpmAttribs[right_inactive].width,
+                                   xpmAttribs[title_1_inactive].height + topMargin,
+                                   screenWidth - (xpmAttribs[right_inactive].width * 2),
+                                   (screenHeight - topMargin - bottomMargin) / 2);
+    }
+    else if (event->xbutton.y_root == (screenHeight - 1) && buttonClick.button == 1) {
+        XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, 0,
+                                   (screenHeight - topMargin - bottomMargin) / 2,
+                                   screenWidth - (xpmAttribs[right_inactive].width * 2),
+                                   (screenHeight  - topMargin - bottomMargin)/ 2);
     }
     else {
         XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, windowAttrib.x + (buttonClick.button == 1 ? xd : 0),
                                                 windowAttrib.y + (buttonClick.button == 1 ? yd : 0),
                                                 windowAttrib.width + (buttonClick.button == 3 ? event->xmotion.x - tempMotionX : 0),
                                                 windowAttrib.height + (buttonClick.button == 3 ? event->xmotion.y - tempMotionY : 0));
-    }
-    if (event->xmotion.x == screenWidth) { // testing
-        printf("wwww \n\n\n");
-        XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, screenWidth / 2,
-                                   0,
-                                   0,
-                                   screenHeight - xpmAttribs[title_1_active].height - xpmAttribs[bottom_active].height - bottomMargin - topMargin);
     }
     tempMotionX = event->xmotion.x;
     tempMotionY = event->xmotion.y;
@@ -435,15 +457,12 @@ void ReDecorate() {
 
 void Decorate(int id)
 {
-    //FILE *log = fopen("/tmp/DecoWMLog", "a");
-    //fprintf(log, "id: %i\n", id);
-    //fclose(log);
     XWindowAttributes parentDecAttribs;
     XGetWindowAttributes(display, workspaces[currentWorkspace][id]->parentDec, &parentDecAttribs);
 
     workspaces[currentWorkspace][id]->closeButton = XCreateSimpleWindow(display, workspaces[currentWorkspace][id]->parentDec,
         parentDecAttribs.width - xpmAttribs[close_inactive].width - xpmAttribs[right_inactive].width, xpmAttribs[bottom_inactive].height,
-        xpmAttribs[close_inactive].width, xpmAttribs[close_inactive].height, 0, BlackPixel(display, screen), WhitePixel(display, screen));
+        xpmAttribs[close_inactive].width, xpmAttribs[close_inactive].height, 0, 0x000000, 0xffffff);
     XMapWindow(display, workspaces[currentWorkspace][id]->closeButton);
     XCopyArea(display, buttonsPixmap[close_inactive], workspaces[currentWorkspace][id]->closeButton, gc, 0, 0, xpmAttribs[close_inactive].width, xpmAttribs[close_inactive].height, 0, 0);
     XGrabButton(display, AnyButton, AnyModifier, workspaces[currentWorkspace][id]->closeButton, True, ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
@@ -452,7 +471,7 @@ void Decorate(int id)
 
     workspaces[currentWorkspace][id]->maxButton = XCreateSimpleWindow(display, workspaces[currentWorkspace][id]->parentDec,
         parentDecAttribs.width - xpmAttribs[maximize_inactive].width * 2 - xpmAttribs[right_inactive].width, xpmAttribs[bottom_inactive].height,
-        xpmAttribs[maximize_inactive].width, xpmAttribs[maximize_inactive].height, 0, BlackPixel(display, screen), WhitePixel(display, screen));
+        xpmAttribs[maximize_inactive].width, xpmAttribs[maximize_inactive].height, 0, 0x000000, 0xffffff);
     XMapWindow(display, workspaces[currentWorkspace][id]->maxButton);
     XCopyArea(display, buttonsPixmap[maximize_inactive], workspaces[currentWorkspace][id]->maxButton, gc, 0, 0, xpmAttribs[maximize_inactive].width, xpmAttribs[maximize_inactive].height, 0, 0);
     XGrabButton(display, AnyButton, AnyModifier, workspaces[currentWorkspace][id]->maxButton, True, ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
@@ -461,7 +480,7 @@ void Decorate(int id)
 
     workspaces[currentWorkspace][id]->hideButton = XCreateSimpleWindow(display, workspaces[currentWorkspace][id]->parentDec,
         parentDecAttribs.width - xpmAttribs[hide_inactive].width * 3 - xpmAttribs[right_inactive].width, xpmAttribs[bottom_inactive].height,
-        xpmAttribs[hide_inactive].width, xpmAttribs[hide_inactive].height, 0, BlackPixel(display, screen), WhitePixel(display, screen));
+        xpmAttribs[hide_inactive].width, xpmAttribs[hide_inactive].height, 0, 0x000000, 0xffffff);
     XMapWindow(display, workspaces[currentWorkspace][id]->hideButton);
     XCopyArea(display, buttonsPixmap[hide_inactive], workspaces[currentWorkspace][id]->hideButton, gc, 0, 0, xpmAttribs[hide_inactive].width, xpmAttribs[hide_inactive].height, 0, 0);
     XGrabButton(display, AnyButton, AnyModifier, workspaces[currentWorkspace][id]->hideButton, True, ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
