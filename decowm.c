@@ -168,6 +168,8 @@ void HandleMapRequest(XEvent *event)
     CreateWindow(mapWindow, parentDec); // TODO pointers // TODO change name
     Decorate(id);
     CenterWindow(id);
+
+    XSetInputFocus(display, mapWindow, 0, CurrentTime);
 }
 
 void HandleButtonPress(XEvent *event)
@@ -220,9 +222,6 @@ void HandleMotionNotify(XEvent *event)
     XWindowAttributes windowAttrib;
     XGetWindowAttributes(display, workspaces[currentWorkspace][id]->window, &windowAttrib);
 
-    //FILE *log = fopen("/tmp/DecoWMLog", "a");
-    //fprintf(log, "a: %i\n", (screenHeight - bottomMargin - 10));
-    //fclose(log);
     if (windowAttrib.x + windowAttrib.width + xd + (int)xpmAttribs[right_inactive].width > screenWidth - 15 &&
         windowAttrib.x + windowAttrib.width + xd + (int)xpmAttribs[right_inactive].width <= screenWidth &&
         buttonClick.button == 1) {
@@ -381,9 +380,27 @@ void HandleConfigureRequest(XEvent *event)
 }
 
 void SendToWorkspace(int workspace) {
+    Window focusedWindow;
+    int revert;
+    XGetInputFocus(display, &focusedWindow, &revert);
+
+    int id = GetID(focusedWindow);
+    _Window *_window = malloc(sizeof(_Window));
+    _window->window = 0;
+
+    workspaces[workspace][id] = workspaces[currentWorkspace][id];
+    XUnmapWindow(display, workspaces[currentWorkspace][id]->window);
+    XUnmapWindow(display, workspaces[currentWorkspace][id]->parentDec);
+    workspaces[currentWorkspace][id] = _window;
+    windowIDs[currentWorkspace][id] = 0;
+    windowIDs[workspace][id] = 1;
+    XSetInputFocus(display, root, 0, CurrentTime);
 }
 
 void GoToWorkspace(int workspace) {
+    if (currentWorkspace == workspace) { // TODO change this solution?
+        return;
+    }
     for (int i=0; i<999; i++) {
         if (windowIDs[currentWorkspace][i]) {
             XUnmapWindow(display, workspaces[currentWorkspace][i]->parentDec);
@@ -395,6 +412,7 @@ void GoToWorkspace(int workspace) {
         }
     }
     currentWorkspace = workspace;
+    XSetInputFocus(display, root, 0, CurrentTime); // TODO change?
 }
 
 void MoveParentDec(int id)
@@ -671,3 +689,6 @@ int main(int argc, char **argv)
 // TODO fix fullscreen add option to keep how it is
 // TODO multimonitor
 // TODO alt tab
+//FILE *log = fopen("/tmp/DecoWMLog", "a");
+//fprintf(log, "unmap\n");
+//fclose(log);
