@@ -41,10 +41,8 @@ typedef struct _Window {
     Window hideButton;
     Window maxButton;
     Window closeButton;
-    struct _Window *up;
-    struct _Window *down;
-    struct _Window *left;
-    struct _Window *right;
+    Window left;
+    Window right;
 } _Window;
 
 void HandleExpose(XEvent *event);
@@ -73,6 +71,7 @@ void SetID(Window window, int id);
 int GetID(Window window);
 int NextID(void);
 void Init(void);
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
 Bool running = True;
 Bool closing = False;
@@ -111,6 +110,9 @@ void HandleExpose(XEvent *event)
     Window exposeWindow = event->xexpose.window;
     int id = GetID(exposeWindow);
 
+    XWindowAttributes windowAttribs;
+    XGetWindowAttributes(display, workspaces[currentWorkspace][id]->window, &windowAttribs);
+
     if (exposeWindow == workspaces[currentWorkspace][id]->closeButton) {
         XCopyArea(display, buttonsPixmap[close_inactive], workspaces[currentWorkspace][id]->closeButton, gc, 0, 0, xpmAttribs[close_inactive].width, xpmAttribs[close_inactive].height, 0, 0);
     }
@@ -119,6 +121,16 @@ void HandleExpose(XEvent *event)
     }
     else if (exposeWindow == workspaces[currentWorkspace][id]->maxButton) {
         XCopyArea(display, buttonsPixmap[maximize_inactive], workspaces[currentWorkspace][id]->maxButton, gc, 0, 0, xpmAttribs[close_inactive].width, xpmAttribs[close_inactive].height, 0, 0);
+    }
+    else if (exposeWindow == workspaces[currentWorkspace][id]->left) {
+        //for (int i=0 ; i<=(int)(windowAttribs.width/xpmAttribs[left_inactive].height); i++) {
+            //XCopyArea(display, buttonsPixmap[left_inactive], workspaces[currentWorkspace][id]->left, gc, 0, -windowAttribs.height +  xpmAttribs[left_inactive].height*i, -xpmAttribs[left_inactive].width, -xpmAttribs[left_inactive].height, 0, 0);
+        //}
+    }
+    else if (exposeWindow == workspaces[currentWorkspace][id]->right) {
+        //for (int i=0 ; i<=(int)(windowAttribs.width/xpmAttribs[left_inactive].height); i++) {
+            //XCopyArea(display, buttonsPixmap[left_inactive], workspaces[currentWorkspace][id]->left, gc, 0, -windowAttribs.height +  xpmAttribs[left_inactive].height*i, -xpmAttribs[left_inactive].width, -xpmAttribs[left_inactive].height, 0, 0);
+        //}
     }
 }
 
@@ -134,13 +146,13 @@ void HandleMapRequest(XEvent *event)
 
     XMapWindow(display, mapWindow);
 
-    XWindowAttributes windowAttrib;
-    XGetWindowAttributes(display, mapWindow, &windowAttrib);
+    XWindowAttributes windowAttribs;
+    XGetWindowAttributes(display, mapWindow, &windowAttribs);
     if (tempHeight || tempWidth) {
         XMoveResizeWindow(display, mapWindow, tempX, tempY, tempWidth, tempHeight);
     }
     else {
-        XMoveResizeWindow(display, mapWindow, tempX, tempY, windowAttrib.width, windowAttrib.height);
+        XMoveResizeWindow(display, mapWindow, tempX, tempY, windowAttribs.width, windowAttribs.height);
     }
 
     unsigned long length, after;
@@ -156,9 +168,9 @@ void HandleMapRequest(XEvent *event)
     XSelectInput(display, mapWindow, ExposureMask|StructureNotifyMask|EnterWindowMask|LeaveWindowMask);
     XGrabButton(display, AnyButton, Mod1Mask, mapWindow, True, PointerMotionMask, GrabModeAsync, GrabModeAsync, 0, 0);
 
-    Window parentDec = XCreateSimpleWindow(display, root, 0, 0, 1, 1, 0, 0x000000, 0x86d6b2);
+    Window parentDec = XCreateSimpleWindow(display, root, 0, 0, windowAttribs.width, windowAttribs.height, 0, 0x000000, 0xffffff);
     XMapWindow(display, parentDec);
-    //XSelectInput(display, parentDec, ExposureMask); // crash
+    //XSelectInput(display, parentDec, ExposureMask);
     XGrabButton(display, AnyButton, AnyModifier, parentDec, True, PointerMotionMask|ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
 
     int id = NextID();
@@ -265,8 +277,8 @@ void HandleMotionNotify(XEvent *event)
     else {
         XMoveResizeWindow(display, workspaces[currentWorkspace][id]->window, windowAttrib.x + (buttonClick.button == 1 ? xd : 0),
                                                 windowAttrib.y + (buttonClick.button == 1 ? yd : 0),
-                                                windowAttrib.width + (buttonClick.button == 3 ? event->xmotion.x - tempMotionX : 0),
-                                                windowAttrib.height + (buttonClick.button == 3 ? event->xmotion.y - tempMotionY : 0));
+                                                MAX(windowAttrib.width + (buttonClick.button == 3 ? event->xmotion.x - tempMotionX : 0), 30),
+                                                MAX(windowAttrib.height + (buttonClick.button == 3 ? event->xmotion.y - tempMotionY : 0), 30));
     }
     tempMotionX = event->xmotion.x;
     tempMotionY = event->xmotion.y;
@@ -316,13 +328,13 @@ void HandleLeaveWindow(XEvent *event)
 void HandleUnmapNotify(XEvent *event)
 {
     Window unmapWindow = event->xunmap.window;
+    closing = True;
     for (int i=0; i<999; i++) {
         if (workspaces[currentWorkspace][i]->window == unmapWindow) {
             XDestroyWindow(display, workspaces[currentWorkspace][i]->parentDec);
             XSetInputFocus(display, root, 0, CurrentTime);
             workspaces[currentWorkspace][i]->window = 0;
             windowIDs[currentWorkspace][i] = 0;
-            closing = True;
             break;
         }
     }
@@ -398,7 +410,7 @@ void SendToWorkspace(int workspace) {
 }
 
 void GoToWorkspace(int workspace) {
-    if (currentWorkspace == workspace) { // TODO change this solution?
+    if (currentWorkspace == workspace) {
         return;
     }
     for (int i=0; i<999; i++) {
@@ -439,6 +451,16 @@ void MoveParentDec(int id)
                                xpmAttribs[bottom_inactive].height,
                                xpmAttribs[hide_inactive].width,
                                xpmAttribs[hide_inactive].height);
+    XMoveResizeWindow(display, workspaces[currentWorkspace][id]->left,
+                               0,
+                               xpmAttribs[top_left_inactive].height,
+                               xpmAttribs[left_inactive].width,
+                               windowAttribs.height);
+    XMoveResizeWindow(display, workspaces[currentWorkspace][id]->right,
+                               windowAttribs.width + xpmAttribs[right_inactive].width,
+                               xpmAttribs[top_right_inactive].height,
+                               xpmAttribs[right_inactive].width,
+                               windowAttribs.height);
 }
 
 void CenterWindow(int id) {
@@ -477,6 +499,8 @@ void Decorate(int id)
 {
     XWindowAttributes parentDecAttribs;
     XGetWindowAttributes(display, workspaces[currentWorkspace][id]->parentDec, &parentDecAttribs);
+    XWindowAttributes windowAttribs;
+    XGetWindowAttributes(display, workspaces[currentWorkspace][id]->window, &windowAttribs);
 
     workspaces[currentWorkspace][id]->closeButton = XCreateSimpleWindow(display, workspaces[currentWorkspace][id]->parentDec,
         parentDecAttribs.width - xpmAttribs[close_inactive].width - xpmAttribs[right_inactive].width, xpmAttribs[bottom_inactive].height,
@@ -504,6 +528,26 @@ void Decorate(int id)
     XGrabButton(display, AnyButton, AnyModifier, workspaces[currentWorkspace][id]->hideButton, True, ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
     XSelectInput(display, workspaces[currentWorkspace][id]->hideButton, ExposureMask|StructureNotifyMask|EnterWindowMask|LeaveWindowMask);
     SetID(workspaces[currentWorkspace][id]->hideButton, id);
+
+    workspaces[currentWorkspace][id]->left = XCreateSimpleWindow(display, workspaces[currentWorkspace][id]->parentDec,
+                                                                 0, 0, xpmAttribs[left_inactive].width, -parentDecAttribs.height, 0, 0x000000, 0xffffff);
+    XMapWindow(display, workspaces[currentWorkspace][id]->left);
+    for (int i=0 ; i<=(int)(windowAttribs.width/xpmAttribs[left_inactive].height); i++) {
+        XCopyArea(display, buttonsPixmap[left_inactive], workspaces[currentWorkspace][id]->left, gc, 0, -windowAttribs.height +  xpmAttribs[left_inactive].height*i, -xpmAttribs[left_inactive].width, -xpmAttribs[left_inactive].height, 0, 0);
+    }
+    XGrabButton(display, AnyButton, AnyModifier, workspaces[currentWorkspace][id]->left, True, ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
+    XSelectInput(display, workspaces[currentWorkspace][id]->left, ExposureMask);
+    SetID(workspaces[currentWorkspace][id]->left, id);
+
+    workspaces[currentWorkspace][id]->right = XCreateSimpleWindow(display, workspaces[currentWorkspace][id]->parentDec,
+                                                                  windowAttribs.width + xpmAttribs[right_inactive].width, 0, xpmAttribs[right_inactive].width, -parentDecAttribs.height, 0, 0x000000, 0xffffff);
+    XMapWindow(display, workspaces[currentWorkspace][id]->right);
+    for (int i=0 ; i<=(int)(windowAttribs.width/xpmAttribs[right_inactive].height); i++) {
+        XCopyArea(display, buttonsPixmap[left_inactive], workspaces[currentWorkspace][id]->right, gc, 0, -windowAttribs.height +  xpmAttribs[left_inactive].height*i, -xpmAttribs[left_inactive].width, -xpmAttribs[left_inactive].height, 0, 0);
+    }
+    XGrabButton(display, AnyButton, AnyModifier, workspaces[currentWorkspace][id]->right, True, ButtonPressMask|ButtonReleaseMask,GrabModeAsync, GrabModeAsync, 0, 0);
+    XSelectInput(display, workspaces[currentWorkspace][id]->right, ExposureMask);
+    SetID(workspaces[currentWorkspace][id]->right, id);
 }
 
 void CloseWindow(int id) // XKillClient closes multiple instances of the same program
@@ -535,10 +579,6 @@ void CreateWindow(Window window, Window parentDec)
     int id = GetID(window);
     _Window *_window = malloc(sizeof(_Window));
     _window->window = window;
-    _window->up = 0;
-    _window->down = 0;
-    _window->left = 0;
-    _window->right = 0;
     _window->parentDec = parentDec;
     workspaces[currentWorkspace][id] = _window;
 }
@@ -598,7 +638,7 @@ void Init()
     _Window *_window = malloc(sizeof(_Window));
     _window->window = 0;
     for (int i=0 ; i<999 ; i++) {
-        for (int j=0 ; j < nWorkspaces ; j++) {
+        for (int j=0 ; j<nWorkspaces ; j++) {
             windowIDs[j][i] = 0;
             workspaces[j][i] = _window;
         }
@@ -648,6 +688,9 @@ int main(int argc, char **argv)
     XEvent event;
     while (running) {
         XNextEvent(display, &event);
+        FILE *log = fopen("/tmp/DecoWMLog", "a");
+        fprintf(log, "event: %i\n", event.type);
+        fclose(log);
         switch (event.type) {
             case(Expose):
                 HandleExpose(&event);
@@ -689,6 +732,4 @@ int main(int argc, char **argv)
 // TODO fix fullscreen add option to keep how it is
 // TODO multimonitor
 // TODO alt tab
-//FILE *log = fopen("/tmp/DecoWMLog", "a");
-//fprintf(log, "unmap\n");
-//fclose(log);
+// TODO other decorations
